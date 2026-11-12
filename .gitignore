@@ -5,3 +5,15 @@ local.properties
 .idea/
 *.iml
 .DS_Store
+.env
+.env.*
+.agents/
+*.local.md
+*.log
+*.jks
+*.keystore
+*.p12
+*.pem
+*service-account*.json
+*.aab
+*.apk
