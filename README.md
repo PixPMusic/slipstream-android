@@ -4,7 +4,7 @@
 
 A native Kotlin and Jetpack Compose Floatplane client, following [Slipstream for Swift](https://github.com/PixPMusic/slipstream-swift). Thumbnail feeds, creator and channel navigation, and compact playback details use Material 3 Expressive components and the system's dynamic light/dark colors. Android versions before 12 use Material's default light/dark schemes.
 
-## Run
+## Build
 
 Requires JDK 17 or newer and Android SDK 37. Set `ANDROID_HOME` or put your SDK path in an untracked `local.properties` (`sdk.dir=/path/to/sdk`).
 
@@ -13,7 +13,7 @@ Requires JDK 17 or newer and Android SDK 37. Set `ANDROID_HOME` or put your SDK 
 ./gradlew :app:testDebugUnitTest :app:lintDebug
 ```
 
-Open in Android Studio, or install `app/build/outputs/apk/debug/app-debug.apk` on Android 8 or later. Package: `cc.pixp.slipstream`.
+Open in Android Studio, or install `app/build/outputs/apk/debug/app-debug.apk` on Android 8 or later. Package: `cc.pixp.slipstream`. A clean checkout needs no Google or signing account; release builds are unsigned unless the Play upload key is supplied (see [CI and distribution](#ci-and-distribution)).
 
 ## Current functionality
 
@@ -27,8 +27,20 @@ Open in Android Studio, or install `app/build/outputs/apk/debug/app-debug.apk` o
 
 Live playback/chat, authored replies, comment editing/deletion, bookmarks are not implemented. The Floatplane API is unofficial and may change.
 
-## Structure
+## Development
+
+See [Contributing](CONTRIBUTING.md) for focused checks, PR requirements, and uploading before/after evidence. Agent guidance lives in [AGENTS.md](AGENTS.md).
 
 One app module. `data/` contains models, API access, encrypted session storage, and demo fixtures. `ui/` contains sign-in, the shared library/drawer, theme, icons, and player. Material 3 is pinned to `1.5.0-beta01` for its public Expressive APIs; other Compose components use BOM `2026.06.01`.
 
-Created in [T3 Code](https://t3.codes). Not affiliated with Floatplane Media.
+Unit tests use synthetic fixtures. They do not sign in, write real sessions, or post comments. Choose **Try Demo** to browse bundled sample content without an account. The launcher icon is generated with `python3 scripts/generate_icon.py`.
+
+## CI and distribution
+
+[CI](.github/workflows/ci.yml) runs unit tests, lint, a debug build, and an unsigned release bundle. PR jobs have a read-only token and no signing secrets. [Play release](.github/workflows/play-release.yml) is a separate manual workflow for an exact `main` commit. It uses the protected `play` environment to sign an App Bundle with the upload key and send it to Play open testing (early access) by default, or to closed or internal testing. It never signs PR artifacts or targets production. See [CI setup](docs/CI.md) for Play Console setup, secrets, and branch restrictions.
+
+Build output, local SDK paths, keystores, and service-account files are ignored. Signing credentials do not belong in source or Gradle files.
+
+## License and privacy
+
+[MIT](LICENSE). The [privacy policy](docs/PRIVACY.md) describes session storage, direct service requests, and feedback. Created in [T3 Code](https://t3.codes). Not affiliated with Floatplane Media.

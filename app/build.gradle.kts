@@ -9,8 +9,21 @@ android {
         applicationId = "cc.pixp.slipstream"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = providers.gradleProperty("slipstream.versionCode").orNull?.toInt() ?: 1
+        versionName = providers.gradleProperty("slipstream.versionName").orNull ?: "0.1.0"
+    }
+    // Release builds are signed only when the Play upload key is supplied by the
+    // environment (the protected release workflow). Local release builds stay unsigned.
+    val uploadKeystore = providers.environmentVariable("SLIPSTREAM_UPLOAD_KEYSTORE").orNull
+    if (uploadKeystore != null) {
+        val password = providers.environmentVariable("SLIPSTREAM_UPLOAD_PASSWORD").get()
+        val upload = signingConfigs.create("upload") {
+            storeFile = file(uploadKeystore)
+            storePassword = password
+            keyAlias = "upload"
+            keyPassword = password
+        }
+        buildTypes.getByName("release").signingConfig = upload
     }
     buildFeatures { compose = true }
     compileOptions {
