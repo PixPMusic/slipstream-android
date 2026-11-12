@@ -37,7 +37,7 @@ Unit tests use synthetic fixtures. They do not sign in, write real sessions, or 
 
 ## CI and distribution
 
-[CI](.github/workflows/ci.yml) runs unit tests, lint, a debug build, and an unsigned release bundle. PR jobs have a read-only token and no signing secrets. [Play release](.github/workflows/play-release.yml) is a separate manual workflow for an exact `main` commit. It uses the protected `play` environment to sign an App Bundle with the upload key and send it to a Play testing track (internal, closed, or open testing). It never signs PR artifacts or targets production. See [CI setup](docs/CI.md) for Play Console setup, secrets, and branch restrictions.
+[CI](.github/workflows/ci.yml) runs unit tests, lint, a debug build, and an unsigned release bundle. PR jobs have a read-only token and no signing secrets. [Play release](.github/workflows/play-release.yml) is a separate manual workflow for an exact `main` commit. It uses the protected `play` environment to sign an App Bundle with the upload key and send it to Play open testing (early access) by default, or to closed or internal testing. It never signs PR artifacts or targets production. See [CI setup](docs/CI.md) for Play Console setup, secrets, and branch restrictions.
 
 Build output, local SDK paths, keystores, and service-account files are ignored. Signing credentials do not belong in source or Gradle files.
 

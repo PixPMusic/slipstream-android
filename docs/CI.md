@@ -18,8 +18,8 @@ artifact.
 
 `play-release.yml` is a manual workflow for an exact `main` commit. It builds a
 signed Android App Bundle with the upload key and sends it to a Play testing
-track. It never signs PR code and never uploads the bundle or key as a GitHub
-artifact.
+track, open testing (`beta`) by default. It never signs PR code and never uploads
+the bundle or key as a GitHub artifact.
 
 ### One-time Play Console setup
 
@@ -29,7 +29,7 @@ artifact.
    only holds the upload key, which Google can reset if it is lost or leaked.
 3. Upload the first bundle manually. Play's API cannot create the first release
    for a new app. Build it locally with the upload key (see below) and upload it
-   to **Internal testing**.
+   to an **Open testing** release with countries selected.
 4. In Google Cloud, create a service account for this app and a JSON key. In Play
    Console **Users and permissions**, invite the service account's email with
    access to this app only, limited to **Release to testing tracks** (and
@@ -38,10 +38,12 @@ artifact.
    policy URL ([PRIVACY.md](PRIVACY.md) once published). Play reviews testing
    releases outside internal testing.
 
-New personal developer accounts must run a closed test (`alpha`) with at least
-12 opted-in testers for 14 days before applying for production access. Internal
-testing (up to 100 testers) is available immediately. Open testing (`beta`)
-also lists the app as an early-access title in the Play Store.
+Open testing (`beta`) lists the app as an early-access title in the Play Store
+that anyone can join. Each open testing release is reviewed by Google before it
+reaches testers. Internal (`internal`) and closed (`alpha`) testing remain
+available for smaller groups. Personal developer accounts created after November
+2023 must also run a closed test with at least 12 opted-in testers for 14 days
+before applying for production access.
 
 ### GitHub environment
 
@@ -71,8 +73,8 @@ or service-account files; `.gitignore` excludes common names as a safeguard.
 ### Running a release
 
 From Actions, dispatch **Play release** on **main** with a version name
-(`X.Y.Z`), a new version code, a track (`internal`, `alpha` closed testing, or
-`beta` open testing), and a status. Version codes must increase with every
+(`X.Y.Z`), a new version code, a track (`beta` open testing by default, or
+`alpha` closed and `internal` testing), and a status. Version codes must increase with every
 upload, including failed attempts that reached Play.
 
 Use `draft` until the app has completed its first Play review; Play rejects

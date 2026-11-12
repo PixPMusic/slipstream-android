@@ -15,9 +15,9 @@ on:
         required: true
         type: string
       track:
-        description: Play testing track
+        description: Play testing track (beta is open testing)
         required: true
-        default: internal
+        default: beta
         type: choice
         options: [internal, alpha, beta]
       status:
