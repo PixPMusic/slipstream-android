@@ -92,5 +92,5 @@ jobs:
           packageName: cc.pixp.slipstream
           releaseFiles: app/build/outputs/bundle/release/app-release.aab
           releaseName: ${{ inputs.version }} (${{ inputs.version_code }})
-          track: ${{ inputs.track }}
+          tracks: ${{ inputs.track }}
           status: ${{ inputs.status }}

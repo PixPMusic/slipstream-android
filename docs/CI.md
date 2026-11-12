@@ -27,16 +27,16 @@ the bundle or key as a GitHub artifact.
    package name `cc.pixp.slipstream`. The package name is permanent.
 2. Use **Play App Signing** (the default). Google holds the app signing key; CI
    only holds the upload key, which Google can reset if it is lost or leaked.
-3. Upload the first bundle manually. Play's API cannot create the first release
-   for a new app. Build it locally with the upload key (see below) and upload it
-   to an **Open testing** release with countries selected.
-4. In Google Cloud, create a service account for this app and a JSON key. In Play
+3. In Google Cloud, create a service account for this app and a JSON key. In Play
    Console **Users and permissions**, invite the service account's email with
    access to this app only, limited to **Release to testing tracks** (and
    **View app information**). Do not grant production release or admin rights.
-5. Complete the store listing, content rating, data safety form, and privacy
-   policy URL ([PRIVACY.md](PRIVACY.md) once published). Play reviews testing
-   releases outside internal testing.
+4. Complete the store listing, content rating, data safety form, and privacy
+   policy URL ([PRIVACY.md](PRIVACY.md) once published), and select countries
+   for open testing. Play reviews testing releases outside internal testing.
+
+The workflow can make the app's first upload. Run it with `draft` status, then
+review and roll out the draft in Play Console.
 
 Open testing (`beta`) lists the app as an early-access title in the Play Store
 that anyone can join. Each open testing release is reviewed by Google before it
@@ -91,8 +91,8 @@ track.
 
 ### Building locally
 
-The same environment variables produce a signed bundle on your machine, for the
-first manual upload or to inspect a release:
+The same environment variables produce a signed bundle on your machine, to inspect
+a release or upload one manually:
 
 ```sh
 SLIPSTREAM_UPLOAD_KEYSTORE=/private/path/slipstream-upload.p12 \
