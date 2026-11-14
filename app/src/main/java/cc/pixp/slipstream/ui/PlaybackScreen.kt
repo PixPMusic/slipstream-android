@@ -41,8 +41,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.ui.PlayerView
 import androidx.work.WorkManager
 import androidx.work.WorkInfo
@@ -51,6 +54,7 @@ import cc.pixp.slipstream.data.*
 import coil.compose.AsyncImage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
@@ -86,6 +90,8 @@ private fun ConnectedPlayer(post:FeedPost,onClose:()->Unit,api:FloatplaneApi?,pl
     var qualities by remember {mutableStateOf<List<MediaQuality>>(emptyList())}
     var mediaId by rememberSaveable(post.id) {mutableStateOf<String?>(null)}
     var qualityId by rememberSaveable(post.id) {mutableStateOf<String?>(null)}
+    var liveQuality by rememberSaveable(post.id) {mutableStateOf("auto")}
+    var tracks by remember(player) {mutableStateOf(player.currentTracks)}
     var loading by remember {mutableStateOf(api!=null)}
     var error by remember {mutableStateOf<String?>(null)}
     var actionError by remember {mutableStateOf<String?>(null)}
@@ -103,7 +109,7 @@ private fun ConnectedPlayer(post:FeedPost,onClose:()->Unit,api:FloatplaneApi?,pl
     val download=downloads.firstOrNull()
     val downloading=download?.state in listOf(WorkInfo.State.ENQUEUED,WorkInfo.State.RUNNING,WorkInfo.State.BLOCKED)
     val permission=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
-    val isVideo=rememberUpdatedState(api==null || detail?.media?.find{it.id==mediaId}?.kind=="video")
+    val isVideo=rememberUpdatedState(api==null || post.live || detail?.media?.find{it.id==mediaId}?.kind=="video")
     LaunchedEffect(isVideo.value) {activity?.updatePip(shouldAutoPip(isVideo.value,player.playWhenReady,player.playbackState))}
     DisposableEffect(player,activity) {
         fun updatePip() {activity?.updatePip(shouldAutoPip(isVideo.value,player.playWhenReady,player.playbackState))}
@@ -114,7 +120,12 @@ private fun ConnectedPlayer(post:FeedPost,onClose:()->Unit,api:FloatplaneApi?,pl
     DisposableEffect(player,owner) {
         val listener=object: Player.Listener {
             override fun onPlaybackStateChanged(state:Int) {buffering=state==Player.STATE_BUFFERING; if(state==Player.STATE_READY) ready=true}
-            override fun onPlayerError(exception:androidx.media3.common.PlaybackException) {error="Playback failed (${exception.errorCodeName}). Try again.";buffering=false}
+            override fun onTracksChanged(next:Tracks) {tracks=next}
+            override fun onPlayerError(exception:androidx.media3.common.PlaybackException) {
+                // Live playback resumed after a long pause falls outside the playlist window; rejoin at the live edge.
+                if(exception.errorCode==androidx.media3.common.PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {player.seekToDefaultPosition();player.prepare();return}
+                error=if(post.live) LIVE_OFFLINE else "Playback failed (${exception.errorCodeName}). Try again.";buffering=false
+            }
         }
         player.addListener(listener)
         onDispose {player.removeListener(listener)}
@@ -125,7 +136,8 @@ private fun ConnectedPlayer(post:FeedPost,onClose:()->Unit,api:FloatplaneApi?,pl
             if(player.currentMediaItem?.mediaId!="${post.id}|demo") {
                 player.setMediaItem(playbackItem(post,"${post.id}|demo","android.resource://${context.packageName}/${R.raw.demo_playback}"));player.prepare();player.play()
             }
-        } else try {
+        } else if(post.live) mediaId=post.id
+        else try {
             val result=api.detail(post.id);detail=result
             if(mediaId==null || result.media.none{it.id==mediaId}) mediaId=result.media.firstOrNull{it.accessible}?.id
         } catch(e:CancellationException){throw e} catch(e:Exception){error=e.message}
@@ -136,17 +148,26 @@ private fun ConnectedPlayer(post:FeedPost,onClose:()->Unit,api:FloatplaneApi?,pl
         if(api==null) return@LaunchedEffect
         loading=true;error=null
         try {
-            val available=api.qualities(id);qualities=available
+            val available=api.qualities(id,if(post.live) "live" else "onDemand");qualities=available
             val retained=player.currentMediaItem?.mediaId?.takeIf{it.startsWith("${post.id}|$id|")}?.substringAfterLast('|')
             val chosen=available.find{it.id==(retained ?: qualityId)} ?: available.firstOrNull() ?: error("No playable media for this subscription.")
             qualityId=chosen.id
             if(player.currentMediaItem?.mediaId!="${post.id}|$id|${chosen.id}") {
+                player.trackSelectionParameters=player.trackSelectionParameters.buildUpon().clearOverridesOfType(C.TRACK_TYPE_VIDEO).build()
                 player.setMediaItem(playbackItem(post,"${post.id}|$id|${chosen.id}",chosen.url));player.prepare();player.play()
             }
-        } catch(e:CancellationException){throw e} catch(e:Exception){error=e.message}
+        } catch(e:CancellationException){throw e} catch(e:Exception){error=if(post.live) LIVE_OFFLINE else e.message}
         finally {loading=false}
     }
     fun switchQuality(quality: MediaQuality) {
+        if(post.live) {
+            // Live renditions share one adaptive playlist; Auto lets the player adapt again.
+            val group=player.currentTracks.groups.firstOrNull{it.type==C.TRACK_TYPE_VIDEO};val index=quality.id.toIntOrNull()
+            player.trackSelectionParameters=player.trackSelectionParameters.buildUpon().apply {
+                if(group==null || index==null) clearOverridesOfType(C.TRACK_TYPE_VIDEO) else setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup,index))
+            }.build()
+            liveQuality=quality.id;return
+        }
         if(quality.id==qualityId) return
         val position=player.currentPosition;val playing=player.playWhenReady
         qualityId=quality.id;error=null
@@ -195,17 +216,21 @@ private fun ConnectedPlayer(post:FeedPost,onClose:()->Unit,api:FloatplaneApi?,pl
             }
             val actions: @Composable () -> Unit = {
             FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                val menuQualities=if(post.live) liveQualities(tracks) else qualities
+                val menuQuality=if(post.live) liveQuality else qualityId
                 Box {
-                    FilledTonalButton(onClick={qualityMenu=true},enabled=qualities.isNotEmpty() && !loading) {Text(qualities.find{it.id==qualityId}?.label ?: if(api==null) "Demo" else "Quality");Glyph(Symbol.Down,Modifier.padding(start=6.dp).size(16.dp))}
-                    DropdownMenu(expanded=qualityMenu,onDismissRequest={qualityMenu=false}) {qualities.forEach {quality ->
-                        DropdownMenuItem(text={Text(quality.label)},leadingIcon={if(quality.id==qualityId) Glyph(Symbol.Check)},onClick={switchQuality(quality);qualityMenu=false})
+                    FilledTonalButton(onClick={qualityMenu=true},enabled=menuQualities.isNotEmpty() && !loading) {Text(menuQualities.find{it.id==menuQuality}?.label ?: if(api==null) "Demo" else "Quality");Glyph(Symbol.Down,Modifier.padding(start=6.dp).size(16.dp))}
+                    DropdownMenu(expanded=qualityMenu,onDismissRequest={qualityMenu=false}) {menuQualities.forEach {quality ->
+                        DropdownMenuItem(text={Text(quality.label)},leadingIcon={if(quality.id==menuQuality) Glyph(Symbol.Check)},onClick={switchQuality(quality);qualityMenu=false})
                     }}
                 }
+                // Streams have no downloads or post reactions.
+                if(!post.live) {
                 Box {
                     FilledTonalIconButton(enabled=api!=null && mediaId!=null && !loading && !preparingDownload && !downloading,onClick={
                         scope.launch {
                             preparingDownload=true;actionError=null
-                            try {downloadQualities=api!!.qualities(mediaId!!,download=true);if(downloadQualities.isEmpty()) error("No downloads available.");downloadMenu=true}
+                            try {downloadQualities=api!!.qualities(mediaId!!,"download");if(downloadQualities.isEmpty()) error("No downloads available.");downloadMenu=true}
                             catch(e:CancellationException){throw e} catch(e:Exception){actionError=e.message} finally{preparingDownload=false}
                         }
                     }) {if(preparingDownload) CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp) else Glyph(Symbol.Download,Modifier.size(20.dp).semanticsLabel("Download"))}
@@ -226,6 +251,7 @@ private fun ConnectedPlayer(post:FeedPost,onClose:()->Unit,api:FloatplaneApi?,pl
                     VerticalDivider(Modifier.height(16.dp),color=MaterialTheme.colorScheme.outlineVariant)
                     VoteHalf(reactions.disliked,reactions.dislikes,Symbol.ThumbDown,if(reactions.disliked) "Remove dislike" else "Dislike post",api!=null && detail!=null && !busyVote) {vote(true)}
                 }
+                }
             }
             }
             BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -234,7 +260,7 @@ private fun ConnectedPlayer(post:FeedPost,onClose:()->Unit,api:FloatplaneApi?,pl
                     actions()
                 } else Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {byline();actions()}
             }
-            if(error!=null) {Text(error!!,color=MaterialTheme.colorScheme.error);TextButton(onClick={retry++}) {Text("Retry playback")}}
+            if(error!=null) {Text(error!!,color=MaterialTheme.colorScheme.error);TextButton(onClick={retry++}) {Text(if(post.live) "Check live status" else "Retry playback")}}
             if(actionError!=null) Text(actionError!!,color=MaterialTheme.colorScheme.error)
             if(download!=null) when(download!!.state) {
                 WorkInfo.State.RUNNING,WorkInfo.State.ENQUEUED,WorkInfo.State.BLOCKED -> {
@@ -251,12 +277,15 @@ private fun ConnectedPlayer(post:FeedPost,onClose:()->Unit,api:FloatplaneApi?,pl
                 Text(description,style=MaterialTheme.typography.bodyLarge,maxLines=if(expanded) Int.MAX_VALUE else 4,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 if(description.length>240) TextButton(onClick={expanded=!expanded},contentPadding=PaddingValues(0.dp)) {Text(if(expanded) "Show less" else "Show more")}
             }
-            HorizontalDivider()
-            CommentsSection(api,post.id,detail?.comments ?: 0)
+            if(!post.live) {
+                HorizontalDivider()
+                CommentsSection(api,post.id,detail?.comments ?: 0)
+            }
         }
     }
 }
 
+private const val LIVE_OFFLINE="This stream is offline or unavailable. Try again when it’s live."
 private fun fullDate(date:String):String? = runCatching {java.time.OffsetDateTime.parse(date).format(java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy"))}.getOrNull()
 internal fun Modifier.semanticsLabel(label: String): Modifier = this.then(Modifier.semantics { contentDescription = label })
 
@@ -278,6 +307,15 @@ private fun VoteHalf(active:Boolean,count:Int,symbol:Symbol,label:String,enabled
 private fun playbackItem(post:FeedPost,id:String,url:String):MediaItem = MediaItem.Builder().setMediaId(id).setUri(url)
     .setMediaMetadata(androidx.media3.common.MediaMetadata.Builder().setTitle(post.title).setArtist(post.channelTitle ?: post.creator.name)
         .setArtworkUri(post.thumbnail?.let{Uri.parse(it)}).build()).build()
+
+/** Live delivery returns one adaptive playlist; its video renditions become the quality choices. */
+internal fun liveQualities(tracks:Tracks):List<MediaQuality> {
+    val group=tracks.groups.firstOrNull{it.type==C.TRACK_TYPE_VIDEO} ?: return emptyList()
+    return listOf(MediaQuality("auto","Auto","",Int.MAX_VALUE)) + (0 until group.length).filter(group::isTrackSupported).map { index ->
+        val format=group.getTrackFormat(index)
+        MediaQuality("$index","${format.height}p${format.frameRate.takeIf{it>31f}?.roundToInt() ?: ""}","",format.height*1000+format.frameRate.roundToInt())
+    }.distinctBy{it.label}.sortedByDescending{it.order}
+}
 
 internal fun shouldAutoPip(video:Boolean,wantsPlayback:Boolean,state:Int):Boolean =
     video && wantsPlayback && (state==Player.STATE_READY || state==Player.STATE_BUFFERING)

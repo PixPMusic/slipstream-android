@@ -1,9 +1,11 @@
 package cc.pixp.slipstream.data
 
-data class Creator(val id: String, val name: String, val initials: String, val icon: String? = null, val cover: String? = null)
+data class Creator(val id: String, val name: String, val initials: String, val icon: String? = null, val cover: String? = null, val liveStream: LiveStream? = null)
+/** A creator's current or most recent stream; delivery reports whether it is live. */
+data class LiveStream(val id: String, val title: String, val description: String, val thumbnail: String?)
 data class Account(val id: String, val name: String, val avatar: String? = null)
 data class CreatorChannel(val id: String, val creator: String, val title: String, val icon: String?, val cover: String?, val order: Int)
-data class FeedPost(val id: String, val title: String, val creator: Creator, val text: String, val duration: String, val thumbnail: String? = null, val releaseDate: String = "", val channelId: String? = null, val channelTitle: String? = null, val accessible: Boolean = true)
+data class FeedPost(val id: String, val title: String, val creator: Creator, val text: String, val duration: String, val thumbnail: String? = null, val releaseDate: String = "", val channelId: String? = null, val channelTitle: String? = null, val accessible: Boolean = true, val live: Boolean = false)
 
 data class MediaAttachment(val id: String, val title: String, val kind: String, val accessible: Boolean)
 data class MediaQuality(val id: String, val label: String, val url: String, val order: Int)
