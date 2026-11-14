@@ -51,9 +51,7 @@ class FloatplaneApi(private val cookie: String) {
     suspend fun creators(): List<Creator> {
         val subscriptions = JSONArray(request("/api/v3/user/subscriptions"))
         val ids = (0 until subscriptions.length()).map { subscriptions.getJSONObject(it).getString("creator") }.distinct()
-        return ids.map { id -> JSONObject(request("/api/v3/creator/info", "id" to id)).let {
-            Creator(it.getString("id"),it.getString("title"),it.getString("title").take(1),it.optJSONObject("icon")?.optString("path"),it.optJSONObject("cover")?.optString("path"))
-        } }.sortedBy { it.name }
+        return ids.map { id -> parseCreator(JSONObject(request("/api/v3/creator/info", "id" to id))) }.sortedBy { it.name }
     }
     suspend fun posts(creator: Creator, query: String="", offset: Int=0, channel: String?=null): List<FeedPost> {
         val params=mutableListOf("id" to creator.id,"limit" to "20","fetchAfter" to offset.toString(),"search" to query)
@@ -77,10 +75,8 @@ class FloatplaneApi(private val cookie: String) {
     }
     suspend fun detail(post: String): PostDetail = parseDetail(JSONObject(request("/api/v3/content/post", "id" to post)))
 
-    suspend fun qualities(media: String, download: Boolean = false): List<MediaQuality> = parseQualities(JSONObject(request(
-        "/api/v3/delivery/info", "scenario" to if(download) "download" else "onDemand", "entityId" to media,
-        "outputKind" to if(download) "flat" else "hls.fmp4"
-    )))
+    suspend fun qualities(media: String, scenario: String = "onDemand"): List<MediaQuality> =
+        parseQualities(JSONObject(request("/api/v3/delivery/info", *deliveryQuery(media, scenario).toTypedArray())))
 
     suspend fun react(post: String, dislike: Boolean): Set<String> = JSONArray(request(
         if(dislike) "/api/v3/content/dislike" else "/api/v3/content/like",
@@ -123,6 +119,17 @@ internal class FloatplaneCookies(private val cookie: String): okhttp3.CookieJar 
 }
 
 internal fun JSONArray.strings(): List<String> = (0 until length()).map {getString(it)}
+
+internal fun parseCreator(json: JSONObject): Creator = Creator(json.getString("id"),json.getString("title"),json.getString("title").take(1),
+    json.optJSONObject("icon")?.optString("path"),json.optJSONObject("cover")?.optString("path"),
+    json.optJSONObject("liveStream")?.let { LiveStream(it.getString("id"),it.optString("title"),it.optString("description").takeUnless {text -> text=="null"}.orEmpty(),it.optJSONObject("thumbnail")?.optString("path")) })
+
+/** Live delivery lets the service choose its format, as the web player does; forcing fMP4 can return no live variants. */
+internal fun deliveryQuery(entity: String, scenario: String): List<Pair<String,String>> = listOf("scenario" to scenario, "entityId" to entity) + when(scenario) {
+    "live" -> listOf("entityKind" to "livestream")
+    "download" -> listOf("outputKind" to "flat")
+    else -> listOf("outputKind" to "hls.fmp4")
+}
 
 internal fun parseDetail(json: JSONObject): PostDetail {
     val media=listOf("video" to "videoAttachments","audio" to "audioAttachments").flatMap { (kind,key) ->

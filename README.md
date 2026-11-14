@@ -21,11 +21,12 @@ Open in Android Studio, or install `app/build/outputs/apk/debug/app-debug.apk` o
 - Library combines subscribed creators, sorted by release date. The navigation drawer exposes creators and their channels, with profile images and channel covers when returned by the API. Channel covers extend across the viewport behind the toolbar; the inside screen also draws behind the status bar, while phones and the folded front screen respect the top safe area. Scrolling reveals the channel title.
 - Responsive thumbnail grid with titles, channel names, dates, durations, and locked-content indicators. The search FAB opens search in the top app bar and filters the selected feed. Pull down to refresh; pagination loads more posts.
 - Media3 on-demand playback with host-scoped authentication cookies. Post titles, creator information, vote controls, and descriptions appear beneath the player. The fullscreen control enters immersive landscape playback and Back restores the inline layout without replacing the player. A quality picker switches delivery renditions while preserving position and play/pause state; attachment selection handles posts with multiple video/audio files. Playback runs in a Media3 session service with background audio and system notification/lock-screen controls. Leaving during active video automatically enters Picture-in-Picture on supported devices. Paused media and audio-only attachments do not auto-enter PiP. Closing the player explicitly stops playback; returning from PiP retains the player and position.
+- Live lists each subscribed creator's current or most recent stream. Live playback uses the same player, service, PiP, and fullscreen behavior, with a quality picker for the stream's renditions (Auto lets the player adapt). Offline streams show a status message and can be rechecked.
 - Post and comment likes/dislikes use Floatplane’s returned interaction state. Comments include posting, pagination, and expandable replies. Demo actions are disabled.
 - Downloads offer available file qualities and run as foreground WorkManager jobs with progress and cancellation. Android 10+ saves to `Downloads/Slipstream`; Android 8–9 uses the app’s external download folder. Notification permission is requested when starting a download.
 - Demo uses the same browsing interface, the Swift app's fictional creators, and its bundled silent, one-minute timecode video. No account or network is needed.
 
-Live playback/chat, authored replies, comment editing/deletion, bookmarks are not implemented. The Floatplane API is unofficial and may change.
+Live chat, authored replies, comment editing/deletion, bookmarks are not implemented. The Floatplane API is unofficial and may change.
 
 ## Development
 

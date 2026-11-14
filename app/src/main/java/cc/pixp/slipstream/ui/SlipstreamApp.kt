@@ -105,13 +105,16 @@ fun LibraryScreen(api: FloatplaneApi?, account: Account, onSignOut: () -> Unit, 
         } catch(e: CancellationException) { throw e } catch(e: Exception) { handle(e) }
     }
     LaunchedEffect(selection, query, creators, channels, refresh) {
-        if(selection == "live") { loading=false; return@LaunchedEffect }
         loading=true; error=null
         try {
             if(query.isNotBlank()) delay(300)
             val nextOffsets = mutableMapOf<String,Int>()
             val nextExhausted = mutableSetOf<String>()
-            val next = if(api == null) {
+            val next = if(selection == "live") {
+                // Creator info carries each current or most recent stream; refresh rereads it.
+                if(refreshing && api != null) creators = api.creators()
+                creators.mapNotNull { creator -> creator.liveStream?.let { FeedPost(it.id,it.title,creator,it.description,"",it.thumbnail,live=true) } }
+            } else if(api == null) {
                 DemoLibrary.filter(activeCreator?.id,query)
             } else activeCreators.flatMap { creator ->
                 val batch=api.posts(creator,query,channel=channel?.id)
@@ -166,8 +169,6 @@ fun LibraryScreen(api: FloatplaneApi?, account: Account, onSignOut: () -> Unit, 
                     val post=selected!!
                     PlaybackScreen(post.copy(channelTitle=post.channelTitle ?: channels.find{it.id==post.channelId}?.title,creator=post.creator.copy(icon=channels.find{it.id==post.channelId}?.icon ?: post.creator.icon)),{selected=null},api)
 
-                } else if(selection=="live") Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) {
-                    Text("Live playback is not available yet.",color=MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
                     BoxWithConstraints(Modifier.fillMaxSize()) {
                         val columns = ((maxWidth - 16.dp) / 256.dp).toInt().coerceAtLeast(1)
@@ -201,8 +202,8 @@ fun LibraryScreen(api: FloatplaneApi?, account: Account, onSignOut: () -> Unit, 
                                     }
                                 }
                                 if(loading && !refreshing) item {Box(Modifier.fillMaxWidth().padding(24.dp),contentAlignment=Alignment.Center){CircularProgressIndicator()}}
-                                else if(posts.isEmpty() && error==null) item {Text(if(query.isBlank()) "No posts" else "No results",modifier=Modifier.padding(24.dp),color=MaterialTheme.colorScheme.onSurfaceVariant)}
-                                if(!demo && activeCreators.any{it.id !in exhausted} && posts.isNotEmpty()) item {
+                                else if(posts.isEmpty() && error==null) item {Text(if(selection=="live") "No live streams" else if(query.isBlank()) "No posts" else "No results",modifier=Modifier.padding(24.dp),color=MaterialTheme.colorScheme.onSurfaceVariant)}
+                                if(!demo && selection!="live" && activeCreators.any{it.id !in exhausted} && posts.isNotEmpty()) item {
                                     Box(Modifier.fillMaxWidth(),contentAlignment=Alignment.Center) {
                                         TextButton(enabled=!loadingMore,onClick={
                                             val requestSelection=selection; val requestQuery=query;val requestCreators=activeCreators
